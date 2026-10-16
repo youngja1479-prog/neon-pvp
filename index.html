@@ -78,7 +78,7 @@ const VW=844,VH=390,TAU=Math.PI*2,STEP=1/60,SNAP_MS=50,IN_MS=33,INTERP=100;
 const AR={x0:14,y0:48,x1:830,y1:382};
 const PILLARS=[{x:422,y:215,r:34},{x:262,y:126,r:22},{x:582,y:304,r:22},{x:262,y:304,r:22},{x:582,y:126,r:22}];
 const SPAWNS=[{x:90,y:215,f:0},{x:754,y:215,f:Math.PI},{x:422,y:76,f:Math.PI/2}];
-const WINS_NEEDED=2,ROUND_TIME=100;
+const WINS_NEEDED=2;
 const PREFIX='neonpvp-gkc7-',ALPH='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]};
 const CLS={
@@ -129,7 +129,6 @@ function step(S,inputs,dt){
   updProj(S,dt);updTraps(S,dt);
   const alive=S.P.filter(p=>p.alive);
   let end=alive.length<=1,w=alive.length===1?alive[0].i:-1;
-  if(!end&&S.time>=ROUND_TIME){end=true;let bv=-1,tie=false;w=-1;for(const p of alive){const v=p.hp/p.mhp;if(v>bv+1e-6){bv=v;w=p.i;tie=false;}else if(Math.abs(v-bv)<1e-6)tie=true;}if(tie)w=-1;}
   if(end){S.ph='rend';S.ct=2.4;S.rw=w;S.lens.push(S.time);if(w>=0){S.wins[w]++;if(S.wins[w]>=WINS_NEEDED)S.winner=w;}S.fx.push({k:'rend',w});}
 }
 function updPlayer(S,p,inp,dt){
@@ -441,7 +440,6 @@ function drawHud(V,now){
   if(me)hpBar(14,8,300,me.hp/me.mhp,ME,false,'나 · '+CLS[me.cls].name+'  '+Math.ceil(me.hp),V.wins[myIdx]);
   if(en)hpBar(530,8,300,en.hp/en.mhp,bodyCol(en.i),true,Math.ceil(en.hp)+'  '+CLS[en.cls].name+' · '+(mode==='bot'?'봇':'상대'),V.wins[en.i]);
   ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='bold 12px system-ui,sans-serif';ctx.fillText('ROUND '+V.rd,422,16);
-  ctx.font='bold 20px system-ui,sans-serif';ctx.fillText(Math.max(0,Math.ceil(ROUND_TIME-V.time)),422,38);
   if(mode!=='bot'&&net.role){ctx.font='11px system-ui,sans-serif';ctx.fillStyle='#8ab';ctx.fillText(rtt?Math.round(rtt)+'ms':'',422,VH-5);}
   if(V.ph==='count'&&!banner){ctx.font='bold 40px system-ui,sans-serif';glow('#fff',16);ctx.fillStyle='#fff';ctx.fillText(Math.ceil(V.ct),422,205);ctx.shadowBlur=0;}
   if(banner){ctx.font='900 46px system-ui,sans-serif';const ba=clamp(banner.t*3,0,1);ctx.globalAlpha=ba*.35;ctx.strokeStyle=banner.col;ctx.lineWidth=9;ctx.lineJoin='round';ctx.strokeText(banner.s,422,200);ctx.globalAlpha=ba;ctx.fillStyle=banner.col;ctx.fillText(banner.s,422,200);ctx.globalAlpha=1;ctx.shadowBlur=0;}
@@ -495,7 +493,7 @@ function startHost(cls){mode='host';myIdx=0;S=newMatch(cls);remoteIn={...NOIN};n
 function startGuest(cls){mode='guest';myIdx=1;gcls=cls;snaps=[];clockOff=null;lastView=null;overShown=false;myRm=oppRm=false;resetLocalFx();show(null);}
 function drainFx(){for(const e of S.fx){playFx(e);if(mode==='host')netFx.push(e);}S.fx.length=0;}
 const r1=v=>Math.round(v*10)/10;
-function makeSnap(){return{t:'s',ht:Math.round(performance.now()),ph:S.ph,ct:r1(S.ct),rd:S.rd,tm:r1(S.time),w:S.wins,win:S.winner,
+function makeSnap(){return{t:'s',ht:Math.round(performance.now()),ph:S.ph,ct:r1(S.ct),rd:S.rd,w:S.wins,win:S.winner,
   P:S.P.map(p=>[r1(p.x),r1(p.y),Math.round(p.face*100)/100,Math.ceil(p.hp),p.act?p.act.k:'',p.act?r1(p.act.t*10)/10:0,p.act&&p.act.a!=null?Math.round(p.act.a*100)/100:0,p.act&&p.act.dx!=null?[r1(p.act.dx),r1(p.act.dy)]:0,r1(p.root),r1(p.cd[0]),r1(p.cd[1]),r1(p.cd[2]),p.fl>0?1:0,p.alive?1:0,p.kb&&p.kb.t>0?[Math.round(p.kb.t/p.kb.T*100)/100,Math.round(Math.atan2(p.kb.vy,p.kb.vx)*100)/100]:0,p.emp>0?1:0]),
   J:S.J.map(j=>[j.id,j.k,j.o,r1(j.x),r1(j.y),Math.round(j.vx),Math.round(j.vy)]),
   T:S.T.map(t=>[t.id,t.o,r1(t.x),r1(t.y),t.arm>0?1:0]),fx:netFx.splice(0)};}
@@ -514,7 +512,7 @@ function buildView(now){
   const src=b&&f>=.5?b:a,dt=b?(b.ht-a.ht)/1000:0;
   const J=[];
   for(const q of (b||a).J){const p=b?a.J.find(x=>x[0]===q[0]):null;let x=q[3],y=q[4];if(b){if(p){x=p[3]+(q[3]-p[3])*f;y=p[4]+(q[4]-p[4])*f;}else{if(f<.5)continue;x=q[3]-q[5]*dt*(1-f);y=q[4]-q[6]*dt*(1-f);}}J.push({id:q[0],k:q[1],o:q[2],x,y,vx:q[5],vy:q[6],r:q[1]==='arrow'||q[1]==='bullet'?4:q[1]==='big'?13:q[1]==='fire'?7:5});}
-  const V={ph:L.ph,ct:L.ct,rd:src.rd,time:src.tm,wins:L.w,winner:L.win,P:a.P.map((_,i)=>snapPlayer(a,b,f,i,L)),J,T:src.T.map(t=>({id:t[0],o:t[1],x:t[2],y:t[3],arm:t[4]?1:0}))};
+  const V={ph:L.ph,ct:L.ct,rd:src.rd,wins:L.w,winner:L.win,P:a.P.map((_,i)=>snapPlayer(a,b,f,i,L)),J,T:src.T.map(t=>({id:t[0],o:t[1],x:t[2],y:t[3],arm:t[4]?1:0}))};
   while(snaps.length>2&&snaps[1].ht<tgt-500&&snaps[0].played)snaps.shift();
   lastView=V;return V;
 }
