@@ -92,7 +92,7 @@ const CLS={
     s2:{name:'후방 도약',short:'도약',cd:6,dist:180,dur:0.28,root:1.0,dmg:8,trapLife:8}},
   mage:{name:'마법사',icon:'🔥',tag:'광역 · 회복',hp:600,spd:160,r:15,aim:420,
     atk:{dmg:18,cd:0.7,range:400,spd:380,rad:40},
-    s1:{name:'반자폭',short:'폭발',cd:7,dmg:20,rad:130,push:20,warn:0.25},
+    s1:{name:'반자폭',short:'폭발',cd:7,dmg:20,rad:130,push:80,warn:0.25,kbT:0.2},
     s2:{name:'회복',short:'회복',cd:10,dur:1.0,heal:110}}
 };
 const ME='#22f6ff',EN=['#ff3b5c','#ff9a2a'],ENATK='#ff7a2a';
@@ -135,7 +135,7 @@ function updPlayer(S,p,inp,dt){
   if(!p.alive)return;
   for(let k=0;k<3;k++)p.cd[k]=Math.max(0,p.cd[k]-dt);
   p.root=Math.max(0,p.root-dt);p.fl=Math.max(0,p.fl-dt);p.inv=Math.max(0,p.inv-dt);
-  if(p.kb&&p.kb.t>0){p.kb.t-=dt;p.x+=p.kb.vx*dt;p.y+=p.kb.vy*dt;collide(p);}
+  if(p.kb&&p.kb.t>0){const k=p.kb,f=Math.max(0,k.t/k.T),g=Math.max(0,(k.t-dt)/k.T),m=(f+g)*.5;k.t-=dt;p.x+=k.vx*m*dt;p.y+=k.vy*m*dt;collide(p);if(k.t<=0)p.kb=null;}
   let mx=+inp.mx||0,my=+inp.my||0;const ml=hyp(mx,my);if(ml>1){mx/=ml;my/=ml;}
   const ne=nearestEnemy(S,p.i);
   let aim=p.face;
@@ -145,7 +145,7 @@ function updPlayer(S,p,inp,dt){
     a.t-=dt;
     if(a.k==='heal'){p.hp=Math.min(p.mhp,p.hp+C.s2.heal/C.s2.dur*dt);if(a.t<=0)p.act=null;}
     else if(a.k==='blast'){if(a.t<=0){p.act=null;S.fx.push({k:'nova',x:p.x,y:p.y,o:p.i});
-        for(const e of S.P){if(e.i===p.i||!e.alive)continue;const d=hyp(e.x-p.x,e.y-p.y);if(d<=C.s1.rad+e.r&&damage(S,e,C.s1.dmg,p.i)){const v=C.s1.push/.15;e.kb={vx:(e.x-p.x)/(d||1)*v,vy:(e.y-p.y)/(d||1)*v,t:.15};}}}}
+        for(const e of S.P){if(e.i===p.i||!e.alive)continue;const d=hyp(e.x-p.x,e.y-p.y);if(d<=C.s1.rad+e.r&&damage(S,e,C.s1.dmg,p.i)){const v=2*C.s1.push/C.s1.kbT;e.kb={vx:(e.x-p.x)/(d||1)*v,vy:(e.y-p.y)/(d||1)*v,t:C.s1.kbT,T:C.s1.kbT};}}}}
     else if(a.k==='dash'||a.k==='leap'){
       p.x+=a.dx*a.v*dt;p.y+=a.dy*a.v*dt;collide(p);
       if(a.k==='dash')for(const e of S.P){if(e.i===p.i||!e.alive||a.hit.includes(e.i))continue;if(hyp(e.x-p.x,e.y-p.y)<p.r+e.r+12){a.hit.push(e.i);S.fx.push({k:'slash',x:e.x,y:e.y,o:p.i});damage(S,e,C.s1.dmg,p.i);}}
@@ -162,7 +162,7 @@ function updPlayer(S,p,inp,dt){
   if(!p.act){
     if(s1&&p.cd[1]<=0&&(p.root<=0||p.cls==='mage')){
       p.cd[1]=C.s1.cd;
-      if(p.cls==='warrior'){p.act={k:'dash',t:C.s1.dur,v:C.s1.dist/C.s1.dur,dx:Math.cos(aim),dy:Math.sin(aim),hit:[]};S.fx.push({k:'dash',x:p.x,y:p.y,o:p.i});}
+      if(p.cls==='warrior'){p.kb=null;p.act={k:'dash',t:C.s1.dur,v:C.s1.dist/C.s1.dur,dx:Math.cos(aim),dy:Math.sin(aim),hit:[]};S.fx.push({k:'dash',x:p.x,y:p.y,o:p.i});}
       else if(p.cls==='mage'){p.act={k:'blast',t:C.s1.warn};S.fx.push({k:'blastw',x:p.x,y:p.y,o:p.i});}
       else{p.act={k:'charge',t:C.s1.charge,a:aim};S.fx.push({k:'charge',x:p.x,y:p.y,o:p.i});}
     }else if(s2&&p.cd[2]<=0&&(p.cls!=='archer'||p.root<=0)){
@@ -172,7 +172,7 @@ function updPlayer(S,p,inp,dt){
       else{
         S.T.push({id:S.nid++,o:p.i,x:p.x,y:p.y,arm:.35,life:C.s2.trapLife});
         const mine=S.T.filter(t=>t.o===p.i);if(mine.length>2)S.T.splice(S.T.indexOf(mine[0]),1);
-        const b=aim+Math.PI;p.act={k:'leap',t:C.s2.dur,v:C.s2.dist/C.s2.dur,dx:Math.cos(b),dy:Math.sin(b)};S.fx.push({k:'leap',x:p.x,y:p.y,o:p.i});
+        const b=aim+Math.PI;p.kb=null;p.act={k:'leap',t:C.s2.dur,v:C.s2.dist/C.s2.dur,dx:Math.cos(b),dy:Math.sin(b)};S.fx.push({k:'leap',x:p.x,y:p.y,o:p.i});
       }
     }
   }
@@ -415,6 +415,7 @@ function render(V,now){
 function drawPlayer(p,now){
   const c=bodyCol(p.i),C=CLS[p.cls],a=p.act&&p.act.k;
   ctx.save();ctx.translate(p.x,p.y);if(!p.alive)ctx.globalAlpha=.22;
+  {const K=p.kb,kf=Array.isArray(K)?K[0]:K&&K.t>0?K.t/K.T:0;if(kf>0){const ka=Array.isArray(K)?K[1]:Math.atan2(K.vy,K.vx),cx=-Math.cos(ka),cy=-Math.sin(ka);ctx.fillStyle=c;for(let n=1;n<=3;n++){ctx.globalAlpha=.32*kf*(1-n*.25);ctx.beginPath();ctx.arc(cx*n*11*(.4+kf),cy*n*11*(.4+kf),p.r*(1-n*.12),0,TAU);ctx.fill();}ctx.globalAlpha=p.alive?1:.22;}}
   if(a==='blast'){const R=C.s1.rad,pr=clamp(1-p.act.t/C.s1.warn,0,1);ctx.fillStyle=c;ctx.globalAlpha=.08+.14*pr;ctx.beginPath();ctx.arc(0,0,R,0,TAU);ctx.fill();ctx.globalAlpha=.9;ctx.strokeStyle=c;ctx.lineWidth=2.5;ctx.stroke();ctx.globalAlpha=.7;ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,Math.max(2,R*pr),0,TAU);ctx.stroke();ctx.globalAlpha=1;}
   if(a==='dash'||a==='leap'){ctx.globalAlpha=.3;ctx.fillStyle=c;ctx.beginPath();ctx.arc(-(p.act.dx||0)*16,-(p.act.dy||0)*16,p.r,0,TAU);ctx.fill();ctx.globalAlpha=1;}
   halo(c,0,0,p.r+20,.75);ctx.lineWidth=3;ctx.strokeStyle=a==='whiff'?'#778':c;ctx.fillStyle=p.fl>0?'#fff':'rgba(10,10,30,.85)';
@@ -471,7 +472,7 @@ function buildCards(){
   const W=CLS.warrior,A=CLS.archer,M=CLS.mage;
   const sk={warrior:`기본: 휘두르기 (앞 부채꼴)<br>스킬1 ${W.s1.name}: ${W.s1.dmg} 피해 · ${W.s1.cd}초<br>스킬2 ${W.s2.name}: ${W.s2.dur}초 방어 → 반격파 ${W.s2.dmg} · ${W.s2.cd}초`,
     archer:`기본: 화살 (관통 X)<br>스킬1 ${A.s1.name}: 관통 ${A.s1.dmg} 피해 · ${A.s1.cd}초<br>스킬2 ${A.s2.name}: 함정 ${A.s2.root}초 속박 · ${A.s2.cd}초`};
-  sk.mage=`기본: 화염구 (착탄 시 반경 ${M.atk.rad} 폭발)<br>스킬1 ${M.s1.name}: ${M.s1.warn}초 예고 후 주변 ${M.s1.rad} ${M.s1.dmg} 피해+밀치기 · ${M.s1.cd}초<br>스킬2 ${M.s2.name}: ${M.s2.dur}초 집중 ${M.s2.heal} 회복(맞으면 끊김) · ${M.s2.cd}초`;
+  sk.mage=`기본: 화염구 (착탄 시 반경 ${M.atk.rad} 폭발)<br>스킬1 ${M.s1.name}: ${M.s1.warn}초 예고 후 주변 ${M.s1.rad} ${M.s1.dmg} 피해+밀치기 ${M.s1.push} · ${M.s1.cd}초<br>스킬2 ${M.s2.name}: ${M.s2.dur}초 집중 ${M.s2.heal} 회복(맞으면 끊김) · ${M.s2.cd}초`;
   $('cards').innerHTML=['warrior','archer','mage'].map(c=>`<div class="card" data-c="${c}"><h3>${CLS[c].icon} ${CLS[c].name}<small>${CLS[c].tag}</small></h3>${statRows(c)}<div class="sk">${sk[c]}</div></div>`).join('');
   for(const el of document.querySelectorAll('.card'))el.onclick=()=>{sel.my=el.dataset.c;if(sel.mode==='online')sendPick();renderSel();};
 }
@@ -498,13 +499,13 @@ function startGuest(cls){mode='guest';myIdx=1;gcls=cls;snaps=[];clockOff=null;la
 function drainFx(){for(const e of S.fx){playFx(e);if(mode==='host')netFx.push(e);}S.fx.length=0;}
 const r1=v=>Math.round(v*10)/10;
 function makeSnap(){return{t:'s',ht:Math.round(performance.now()),ph:S.ph,ct:r1(S.ct),rd:S.rd,tm:r1(S.time),w:S.wins,win:S.winner,
-  P:S.P.map(p=>[r1(p.x),r1(p.y),Math.round(p.face*100)/100,Math.ceil(p.hp),p.act?p.act.k:'',p.act?r1(p.act.t*10)/10:0,p.act&&p.act.a!=null?Math.round(p.act.a*100)/100:0,p.act&&p.act.dx!=null?[r1(p.act.dx),r1(p.act.dy)]:0,r1(p.root),r1(p.cd[0]),r1(p.cd[1]),r1(p.cd[2]),p.fl>0?1:0,p.alive?1:0]),
+  P:S.P.map(p=>[r1(p.x),r1(p.y),Math.round(p.face*100)/100,Math.ceil(p.hp),p.act?p.act.k:'',p.act?r1(p.act.t*10)/10:0,p.act&&p.act.a!=null?Math.round(p.act.a*100)/100:0,p.act&&p.act.dx!=null?[r1(p.act.dx),r1(p.act.dy)]:0,r1(p.root),r1(p.cd[0]),r1(p.cd[1]),r1(p.cd[2]),p.fl>0?1:0,p.alive?1:0,p.kb&&p.kb.t>0?[Math.round(p.kb.t/p.kb.T*100)/100,Math.round(Math.atan2(p.kb.vy,p.kb.vx)*100)/100]:0]),
   J:S.J.map(j=>[j.id,j.k,j.o,r1(j.x),r1(j.y),Math.round(j.vx),Math.round(j.vy)]),
   T:S.T.map(t=>[t.id,t.o,r1(t.x),r1(t.y),t.arm>0?1:0]),fx:netFx.splice(0)};}
 function snapPlayer(a,b,f,i,L){
   const A=a.P[i],B=b?b.P[i]:A,D=f<.5||!b?A:B,Lp=L.P[i];
   const act=D[4]?{k:D[4],t:D[5],a:D[6]!==0?lerpA(A[6],B[6],f):D[2],dx:D[7]?D[7][0]:0,dy:D[7]?D[7][1]:0}:null;
-  return{i,cls:gcls[i],r:CLS[gcls[i]].r,x:A[0]+(B[0]-A[0])*f,y:A[1]+(B[1]-A[1])*f,face:lerpA(A[2],B[2],f),hp:D[3],mhp:CLS[gcls[i]].hp,act,root:D[8],cd:[Lp[9],Lp[10],Lp[11]],fl:D[12],alive:!!D[13]};
+  return{i,cls:gcls[i],r:CLS[gcls[i]].r,x:A[0]+(B[0]-A[0])*f,y:A[1]+(B[1]-A[1])*f,face:lerpA(A[2],B[2],f),hp:D[3],mhp:CLS[gcls[i]].hp,act,root:D[8],cd:[Lp[9],Lp[10],Lp[11]],fl:D[12],alive:!!D[13],kb:D[14]||0};
 }
 function buildView(now){
   if(!snaps.length)return lastView;
