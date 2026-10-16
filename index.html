@@ -88,7 +88,7 @@ const CLS={
     s2:{name:'후방 도약',short:'도약',cd:6,dist:180,dur:0.28,root:1.0,dmg:8,trapLife:8}},
   mage:{name:'마법사',icon:'🔥',tag:'광역 · 회복',hp:600,spd:160,r:15,aim:420,
     atk:{dmg:18,cd:0.7,range:400,spd:380,rad:40},
-    s1:{name:'메테오',short:'메테오',cd:7,dmg:35,rad:90,range:450,warn:0.7,auto:300},
+    s1:{name:'메테오',short:'메테오',cd:7,dmg:35,rad:90,range:450,warn:0.35,auto:300},
     s2:{name:'회복',short:'회복',cd:10,dur:1.0,heal:110}},
   gunner:{name:'사격수',icon:'🔫',tag:'원거리 · 저격',hp:600,spd:160,r:15,aim:480,
     atk:{dmg:22,cd:1.0,range:450,spd:960},
@@ -240,7 +240,7 @@ function botThink(S,i,B,dt){
   const e=ne.e,d=Math.max(1,ne.d),ux=(e.x-p.x)/d,uy=(e.y-p.y)/d,C=CLS[p.cls];
   const los=!segBlocked(p.x,p.y,e.x,e.y,3),ek=e.act&&e.act.k;
   let evx=0,evy=0;if(B.lx!=null&&dt>0){evx=(e.x-B.lx)/dt;evy=(e.y-B.ly)/dt;if(hyp(evx,evy)>400){evx=evy=0;}}B.ev=B.ev||{x:0,y:0};B.ev.x+=(evx-B.ev.x)*.3;B.ev.y+=(evy-B.ev.y)*.3;B.lx=e.x;B.ly=e.y;
-  const MR=CLS.mage.s1.rad,mets=(S.M||[]).filter(m=>m.o!==i);let inMet=null;for(const m of mets){if(hyp(p.x-m.x,p.y-m.y)<MR+p.r+6&&(!inMet||m.t<inMet.t))inMet=m;}
+  const MR=CLS.mage.s1.rad,MW=CLS.mage.s1.warn;B.mrt=B.mrt||{};const mets=(S.M||[]).filter(m=>{if(m.o===i)return false;let rt=B.mrt[m.id];if(rt==null)rt=B.mrt[m.id]=.15+Math.random()*.1;return MW-m.t>=rt;});if(!(S.M&&S.M.length))B.mrt={};let inMet=null;for(const m of mets){if(hyp(p.x-m.x,p.y-m.y)<MR+p.r+6&&(!inMet||m.t<inMet.t))inMet=m;}
   B.st-=dt;if(B.st<=0){B.sx=-B.sx;B.st=.5+Math.random()*1.1;}
   B.dec-=dt;const dec=B.dec<=0;if(dec){B.dec=.1+Math.random()*.12;B.dodge=Math.random()<.35;}
   let th=null;
@@ -262,16 +262,18 @@ function botThink(S,i,B,dt){
     if(th){const l=hyp(th.j.vx,th.j.vy),side=((p.x-th.j.x)*-th.j.vy+(p.y-th.j.y)*th.j.vx)>0?1:-1;mx+=-th.j.vy/l*side*1.5;my+=th.j.vx/l*side*1.5;}
     o.a=los&&d<C.atk.range-(MG||GN?20:0);
     const onLz=lz&&(()=>{const rx=p.x-e.x,ry=p.y-e.y;return rx*lz.c+ry*lz.s>0&&Math.abs(rx*lz.s-ry*lz.c)<p.r+CLS.gunner.s1.w;})();
-    if(dec&&MG){
+    let metEsc=false;if(inMet&&!(B.mdone=B.mdone||{})[inMet.id]){B.mdone[inMet.id]=1;metEsc=Math.random()<.6;}if(!(S.M&&S.M.length))B.mdone={};
+    if(metEsc&&GN&&p.cd[2]<=0)o.s2n++;
+    else if(dec&&MG){
       if(p.cd[1]<=0&&d<C.s1.range+40&&Math.random()<.5){const L=C.s1.warn*.6;o.s1m=1;o.s1x=e.x+B.ev.x*L;o.s1y=e.y+B.ev.y*L;o.s1n++;}
       else if(p.cd[2]<=0&&p.hp<p.mhp*.65&&(d>200||!los)&&Math.random()<.5)o.s2n++;
     }else if(dec&&GN){
-      if(p.cd[2]<=0&&((th&&Math.random()<.6)||(onLz&&e.act.t<.3&&Math.random()<.7)||(inMet&&inMet.t<.35&&Math.random()<.6)||(p.hp<p.mhp*.35&&d<180&&Math.random()<.3)))o.s2n++;
+      if(p.cd[2]<=0&&((th&&Math.random()<.6)||(onLz&&e.act.t<.3&&Math.random()<.7)||(p.hp<p.mhp*.35&&d<180&&Math.random()<.3)))o.s2n++;
       else if(p.cd[1]<=0&&!inMet&&los&&!segBlocked(p.x,p.y,e.x,e.y,8)&&d<C.s1.len-80&&ek!=='roll'&&Math.random()<.4)o.s1n++;
-    }else if(dec){
+    }else if(dec||(metEsc&&!GN&&!MG)){
       const ml0=hyp(mx,my)||1,lux=d<=C.aim?ux:mx/ml0,luy=d<=C.aim?uy:my/ml0,lpx=p.x-lux*C.s2.dist,lpy=p.y-luy*C.s2.dist,lpSafe=!mets.some(m=>hyp(lpx-m.x,lpy-m.y)<MR+p.r+6);
-      if(p.cd[2]<=0&&lpSafe&&(d<115||(inMet&&inMet.t<.3))&&Math.random()<.8)o.s2n++;
-      else if(p.cd[1]<=0&&!inMet&&los&&d>140&&d<C.s1.range-60&&Math.random()<.45)o.s1n++;
+      if(p.cd[2]<=0&&lpSafe&&(metEsc||(dec&&d<115))&&Math.random()<(metEsc?1:.8))o.s2n++;
+      else if(dec&&p.cd[1]<=0&&!inMet&&los&&d>140&&d<C.s1.range-60&&Math.random()<.45)o.s1n++;
     }
   }
   const m=60;
@@ -333,7 +335,7 @@ const SFX={
   arrow:()=>tone(900,.07,'square',.03,500),big:()=>{tone(160,.35,'sawtooth',.08,60);noise(.25,.3,600);},
   hit:()=>{tone(140,.12,'square',.07,60);noise(.08,.25,900);},hurt:()=>{tone(90,.2,'sawtooth',.09,45);},
   spark:()=>noise(.05,.08,4000),
-  fire:()=>{tone(300,.15,'sawtooth',.04,150);noise(.12,.15,800);},boom:()=>{noise(.2,.3,500);tone(160,.15,'square',.05,70);},meteor:()=>{noise(.5,.45,380);tone(220,.45,'sawtooth',.08,45);},metw:()=>tone(1400,.7,'sine',.035,220),heal:()=>[523,659,784].forEach((f,i)=>tone(f,.2,'sine',.05,null,i*.12)),charge:()=>tone(220,.55,'triangle',.05,880),
+  fire:()=>{tone(300,.15,'sawtooth',.04,150);noise(.12,.15,800);},boom:()=>{noise(.2,.3,500);tone(160,.15,'square',.05,70);},meteor:()=>{noise(.5,.45,380);tone(220,.45,'sawtooth',.08,45);},metw:()=>tone(1400,CLS.mage.s1.warn,'sine',.035,220),heal:()=>[523,659,784].forEach((f,i)=>tone(f,.2,'sine',.05,null,i*.12)),charge:()=>tone(220,.55,'triangle',.05,880),
   leap:()=>tone(400,.25,'triangle',.06,1200),trap:()=>{tone(1500,.05,'square',.04);tone(700,.12,'square',.04,null,.05);},
   ko:()=>{noise(.5,.35,300);tone(400,.5,'sawtooth',.07,40);},go:()=>tone(1046,.18,'square',.05),
   cnt:()=>tone(523,.1,'square',.04),win:()=>[523,659,784,1046].forEach((f,i)=>tone(f,.18,'square',.05,null,i*.1)),lose:()=>[392,330,262].forEach((f,i)=>tone(f,.25,'triangle',.06,null,i*.14))
