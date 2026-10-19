@@ -88,8 +88,8 @@ const CLS={
     s2:{name:'부채꼴 연사',short:'연사',cd:6,n:5,fan:50,dmg:14,waves:3,gap:0.2}},
   mage:{name:'마법사',icon:'🔥',tag:'광역 · 회복',hp:600,spd:160,r:15,aim:420,
     atk:{dmg:18,cd:0.7,range:400,spd:380,rad:40},
-    s1:{name:'메테오',short:'메테오',cd:7,dmg:35,rad:90,range:450,warn:2.0,auto:300},
-    s2:{name:'회복',short:'회복',cd:10,dur:1.0,heal:110}},
+    s1:{name:'메테오',short:'메테오',cd:7,dmg:35,rad:75,range:450,warn:1.0,auto:300},
+    s2:{name:'회복',short:'회복',cd:12,dur:1.0,heal:70}},
   gunner:{name:'사격수',icon:'🔫',tag:'원거리 · 저격',hp:600,spd:160,r:15,aim:480,
     atk:{dmg:22,cd:1.0,range:450,spd:960},
     s1:{name:'레이저',short:'레이저',cd:7,warn:0.5,dmg:35,len:650,w:14},
@@ -162,7 +162,7 @@ function updPlayer(S,p,inp,dt){
     if(s1&&p.cd[1]<=0&&(p.root<=0||p.cls!=='archer')){
       p.cd[1]=C.s1.cd;
       if(p.cls==='gunner'){p.act={k:'laser',t:C.s1.warn,a:aim};p.face=aim;S.fx.push({k:'laserw',x:p.x,y:p.y,o:p.i});}
-      else if(p.cls==='mage'){const t=meteorTarget(S,p,inp);p.face=Math.atan2(t.y-p.y,t.x-p.x);S.M=S.M||[];S.M.push({id:S.nid++,o:p.i,x:t.x,y:t.y,t:C.s1.warn});S.fx.push({k:'metw',x:Math.round(t.x),y:Math.round(t.y),o:p.i});}
+      else if(p.cls==='mage'){const t=meteorTarget(S,p,inp);p.face=Math.atan2(t.y-p.y,t.x-p.x);S.M=S.M||[];S.M.push({id:S.nid++,o:p.i,x:t.x,y:t.y,t:C.s1.warn+dt});/* +dt: 같은 스텝의 updMeteors 감소분 보정 → 정확히 warn초 후 착탄 */S.fx.push({k:'metw',x:Math.round(t.x),y:Math.round(t.y),o:p.i});}
       else{p.act={k:'charge',t:C.s1.charge,a:aim};S.fx.push({k:'charge',x:p.x,y:p.y,o:p.i});}
     }else if(s2&&p.cd[2]<=0&&(p.cls==='mage'||p.root<=0)){
       p.cd[2]=C.s2.cd;
@@ -203,7 +203,7 @@ function meteorTarget(S,p,inp){const C=CLS.mage.s1;let tx,ty;
   let dx=tx-p.x,dy=ty-p.y;const d=hyp(dx,dy);if(d>C.range){dx*=C.range/d;dy*=C.range/d;}
   return{x:clamp(p.x+dx,AR.x0,AR.x1),y:clamp(p.y+dy,AR.y0,AR.y1)};}
 // 하늘에서 떨어지므로 기둥 무시, 적만 피해
-function updMeteors(S,dt){if(!S.M)return;for(let n=S.M.length-1;n>=0;n--){const m=S.M[n];m.t-=dt;if(m.t>0)continue;S.M.splice(n,1);const C=CLS.mage.s1;
+function updMeteors(S,dt){if(!S.M)return;for(let n=S.M.length-1;n>=0;n--){const m=S.M[n];m.t-=dt;if(m.t>1e-6)continue;S.M.splice(n,1);const C=CLS.mage.s1;
   S.fx.push({k:'meteor',x:Math.round(m.x),y:Math.round(m.y),o:m.o});
   for(const e of S.P){if(e.i===m.o||!e.alive)continue;if(hyp(e.x-m.x,e.y-m.y)<=C.rad+e.r)damage(S,e,C.dmg,m.o);}}}
 function damage(S,v,amt,oi){
@@ -335,7 +335,7 @@ const SFX={
   arrow:()=>tone(900,.07,'square',.03,500),big:()=>{tone(160,.35,'sawtooth',.08,60);noise(.25,.3,600);},
   hit:()=>{tone(140,.12,'square',.07,60);noise(.08,.25,900);},hurt:()=>{tone(90,.2,'sawtooth',.09,45);},
   spark:()=>noise(.05,.08,4000),
-  fire:()=>{tone(300,.15,'sawtooth',.04,150);noise(.12,.15,800);},boom:()=>{noise(.2,.3,500);tone(160,.15,'square',.05,70);},meteor:()=>{noise(.5,.45,380);tone(220,.45,'sawtooth',.08,45);},metw:()=>{const W=CLS.mage.s1.warn;tone(1400,.3,'sine',.035,900);tone(1400,.3,'sine',.03,900,.35);if(W>.8)tone(900,.6,'sine',.03,180,W-.6);},heal:()=>[523,659,784].forEach((f,i)=>tone(f,.2,'sine',.05,null,i*.12)),charge:()=>tone(220,.55,'triangle',.05,880),
+  fire:()=>{tone(300,.15,'sawtooth',.04,150);noise(.12,.15,800);},boom:()=>{noise(.2,.3,500);tone(160,.15,'square',.05,70);},meteor:()=>{noise(.5,.45,380);tone(220,.45,'sawtooth',.08,45);},metw:()=>{const W=CLS.mage.s1.warn,wd=Math.min(.6,W*.5);tone(1400,.18,'sine',.035,900);tone(1400,.18,'sine',.03,900,.22);if(W>=.8)tone(900,wd,'sine',.03,180,W-wd);},heal:()=>[523,659,784].forEach((f,i)=>tone(f,.2,'sine',.05,null,i*.12)),charge:()=>tone(220,.55,'triangle',.05,880),
   volley:()=>{noise(.12,.18,2600);tone(900,.12,'triangle',.05,500);},
   ko:()=>{noise(.5,.35,300);tone(400,.5,'sawtooth',.07,40);},go:()=>tone(1046,.18,'square',.05),
   cnt:()=>tone(523,.1,'square',.04),win:()=>[523,659,784,1046].forEach((f,i)=>tone(f,.18,'square',.05,null,i*.1)),lose:()=>[392,330,262].forEach((f,i)=>tone(f,.25,'triangle',.06,null,i*.14))
