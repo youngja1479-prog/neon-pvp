@@ -85,7 +85,7 @@ const CLS={
   archer:{name:'궁수',icon:'🏹',tag:'원거리 · 날렵함',hp:550,spd:170,r:14,aim:520,
     atk:{dmg:10,cd:0.5,range:500,spd:640},
     s1:{name:'거대 화살',short:'거대',cd:6,charge:0.55,slow:0.3,dmg:40,spd:820,range:720},
-    s2:{name:'부채꼴 연사',short:'연사',cd:6,n:5,fan:50,dmg:9,cap:3}},
+    s2:{name:'부채꼴 연사',short:'연사',cd:6,n:5,fan:50,dmg:14,waves:3,gap:0.2}},
   mage:{name:'마법사',icon:'🔥',tag:'광역 · 회복',hp:600,spd:160,r:15,aim:420,
     atk:{dmg:18,cd:0.7,range:400,spd:380,rad:40},
     s1:{name:'메테오',short:'메테오',cd:7,dmg:35,rad:90,range:450,warn:2.0,auto:300},
@@ -134,8 +134,9 @@ function step(S,inputs,dt){
 function updPlayer(S,p,inp,dt){
   const C=CLS[p.cls];
   const s1=inp.s1n!==p.s1n,s2=inp.s2n!==p.s2n;p.s1n=inp.s1n;p.s2n=inp.s2n;
-  if(!p.alive)return;
+  if(!p.alive){p.vol=null;return;}
   for(let k=0;k<3;k++)p.cd[k]=Math.max(0,p.cd[k]-dt);
+  if(p.vol){p.vol.t-=dt;if(p.vol.t<=1e-6)volleyWave(S,p);}
   p.root=Math.max(0,p.root-dt);p.fl=Math.max(0,p.fl-dt);p.inv=Math.max(0,p.inv-dt);p.emp=Math.max(0,(p.emp||0)-dt);
   if(p.kb&&p.kb.t>0){const k=p.kb,f=Math.max(0,k.t/k.T),g=Math.max(0,(k.t-dt)/k.T),m=(f+g)*.5;k.t-=dt;p.x+=k.vx*m*dt;p.y+=k.vy*m*dt;collide(p);if(k.t<=0)p.kb=null;}
   let mx=+inp.mx||0,my=+inp.my||0;const ml=hyp(mx,my);if(ml>1){mx/=ml;my/=ml;}
@@ -167,9 +168,8 @@ function updPlayer(S,p,inp,dt){
       p.cd[2]=C.s2.cd;
       if(p.cls==='gunner'){const b=ml>.2?Math.atan2(my,mx):aim;p.kb=null;p.emp=0;p.inv=Math.max(p.inv,C.s2.dur);p.act={k:'roll',t:C.s2.dur,v:C.s2.dist/C.s2.dur,dx:Math.cos(b),dy:Math.sin(b)};S.fx.push({k:'roll',x:p.x,y:p.y,o:p.i});}
       else if(p.cls==='mage'){p.act={k:'heal',t:C.s2.dur};S.fx.push({k:'heal',x:p.x,y:p.y,o:p.i});}
-      else{// 부채꼴 연사: n발 동시 발사, 한 연사에서 같은 적은 최대 cap발까지만 피해
-        p.face=aim;const vh={},F=C.s2.fan*Math.PI/180;for(let k=0;k<C.s2.n;k++){spawnProj(S,p,'arrow',aim-F/2+F*k/(C.s2.n-1),true);S.J[S.J.length-1].vh=vh;S.J[S.J.length-1].dmg=C.s2.dmg;}
-        S.fx.push({k:'volley',x:Math.round(p.x),y:Math.round(p.y),o:p.i});p.cd[0]=Math.max(p.cd[0],.2);
+      else{// 부채꼴 연사: 3파(0.2초 간격) × n발, 피해 제한 없음
+        p.face=aim;p.vol={a:aim,left:C.s2.waves,t:0};volleyWave(S,p);p.cd[0]=Math.max(p.cd[0],.2);
       }
     }
   }
@@ -179,6 +179,9 @@ function updPlayer(S,p,inp,dt){
     else spawnProj(S,p,p.cls==='mage'?'fire':'arrow',aim);
   }
 }
+// 부채꼴 연사 1파(호스트 전용 상태 p.vol: 방향 고정, 현재 위치에서 발사)
+function volleyWave(S,p){const C=CLS[p.cls].s2,v=p.vol,F=C.fan*Math.PI/180;for(let k=0;k<C.n;k++){spawnProj(S,p,'arrow',v.a-F/2+F*k/(C.n-1),true);S.J[S.J.length-1].dmg=C.dmg;}
+  S.fx.push({k:'volley',x:Math.round(p.x),y:Math.round(p.y),o:p.i});v.left--;v.t+=C.gap;if(v.left<=0)p.vol=null;}
 function spawnProj(S,p,k,ang,quiet){
   const C=CLS[p.cls];let d;
   if(k==='arrow')d={sp:C.atk.spd,r:4,dmg:C.atk.dmg,rng:C.atk.range,pierce:false};
@@ -207,7 +210,7 @@ function damage(S,v,amt,oi){
   if(!v.alive||v.inv>0)return false;
   v.hp-=amt;v.fl=.15;S.fx.push({k:'hit',x:v.x,y:v.y,v:v.i,n:amt});
   if(v.act&&v.act.k==='heal'){v.act=null;S.fx.push({k:'healx',x:v.x,y:v.y});}
-  if(v.hp<=0){v.hp=0;v.alive=false;v.act=null;S.fx.push({k:'ko',x:v.x,y:v.y,v:v.i});}
+  if(v.hp<=0){v.hp=0;v.alive=false;v.act=null;v.vol=null;S.fx.push({k:'ko',x:v.x,y:v.y,v:v.i});}
   return true;
 }
 function updProj(S,dt){
@@ -217,7 +220,7 @@ function updProj(S,dt){
     if(!dead)for(const q of PILLARS)if(hyp(j.x-q.x,j.y-q.y)<q.r+j.r*.4){dead=true;S.fx.push({k:'spark',x:j.x,y:j.y,o:j.o});break;}
     if(!dead&&fire){for(const e of S.P){if(e.i!==j.o&&e.alive&&hyp(e.x-j.x,e.y-j.y)<e.r+j.r){dead=true;break;}}}
     if(fire&&dead){j.x=clamp(j.x,AR.x0,AR.x1);j.y=clamp(j.y,AR.y0,AR.y1);explode(S,j);}
-    else if(!dead)for(const e of S.P){if(e.i===j.o||!e.alive||j.hit.includes(e.i))continue;if(hyp(e.x-j.x,e.y-j.y)<e.r+j.r){j.hit.push(e.i);if(j.vh){if((j.vh[e.i]||0)>=CLS.archer.s2.cap){dead=true;break;}j.vh[e.i]=(j.vh[e.i]||0)+1;}const ok=damage(S,e,j.dmg,j.o);if(!ok||!j.pierce){dead=true;break;}}}
+    else if(!dead)for(const e of S.P){if(e.i===j.o||!e.alive||j.hit.includes(e.i))continue;if(hyp(e.x-j.x,e.y-j.y)<e.r+j.r){j.hit.push(e.i);const ok=damage(S,e,j.dmg,j.o);if(!ok||!j.pierce){dead=true;break;}}}
     if(dead)S.J.splice(n,1);
   }
 }
@@ -488,7 +491,7 @@ function statRows(c){const C=CLS[c],dps=C.atk.dmg/C.atk.cd;
   return rows.map(r=>`<div class="st"><span>${r[0]}</span><div class="bar"><i style="width:${Math.round(clamp(r[2],.05,1)*100)}%"></i></div><b>${r[1]}</b></div>`).join('')+`<div class="st"><span>초당 피해</span><div class="bar"><i style="width:${Math.round(clamp(dps/34,.05,1)*100)}%"></i></div><b>${dps.toFixed(0)}</b></div>`;}
 function buildCards(){
   const A=CLS.archer,M=CLS.mage,G=CLS.gunner;
-  const sk={archer:`기본: 화살 (관통 X)<br>스킬1 ${A.s1.name}: 관통 ${A.s1.dmg} 피해 · ${A.s1.cd}초<br>스킬2 ${A.s2.name}: ${A.s2.fan}° 부채꼴로 화살 ${A.s2.n}발(각 ${A.s2.dmg}, 한 대상 최대 ${A.s2.cap}발=${A.s2.dmg*A.s2.cap}) · ${A.s2.cd}초`};
+  const sk={archer:`기본: 화살 (관통 X)<br>스킬1 ${A.s1.name}: 관통 ${A.s1.dmg} 피해 · ${A.s1.cd}초<br>스킬2 ${A.s2.name}: ${A.s2.fan}° 부채꼴로 화살 ${A.s2.n}발 × ${A.s2.waves}회(${A.s2.gap}초 간격, 각 ${A.s2.dmg}) · ${A.s2.cd}초`};
   sk.mage=`기본: 화염구 (착탄 시 반경 ${M.atk.rad} 폭발)<br>스킬1 ${M.s1.name}: 드래그 조준(최대 ${M.s1.range}, 탭=자동) → ${M.s1.warn}초 후 반경 ${M.s1.rad} 낙하 ${M.s1.dmg} 피해(기둥 무시) · ${M.s1.cd}초<br>스킬2 ${M.s2.name}: ${M.s2.dur}초 집중 ${M.s2.heal} 회복(맞으면 끊김) · ${M.s2.cd}초`;
   sk.gunner=`기본: 사격 (고속탄, ${G.atk.dmg} 피해)<br>스킬1 ${G.s1.name}: ${G.s1.warn}초 조준(이동 가능·방향 고정) 후 관통 광선 ${G.s1.dmg} 피해 · ${G.s1.cd}초<br>스킬2 ${G.s2.name}: ${G.s2.dist} 이동·무적 → ${G.s2.buff}초 내 다음 사격 ${G.s2.mult}배(${Math.round(G.atk.dmg*G.s2.mult)}) · ${G.s2.cd}초`;
   $('cards').innerHTML=CLS_IDS.map(c=>`<div class="card" data-c="${c}"><h3>${CLS[c].icon} ${CLS[c].name}<small>${CLS[c].tag}</small></h3>${statRows(c)}<div class="sk">${sk[c]}</div></div>`).join('');
