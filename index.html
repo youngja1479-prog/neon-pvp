@@ -89,10 +89,10 @@ const CLS={
   mage:{name:'마법사',icon:'🔥',tag:'광역 · 폭격',hp:600,spd:160,r:15,aim:420,
     atk:{dmg:18,cd:0.7,range:400,spd:380,rad:40},
     s1:{name:'메테오',short:'메테오',cd:7,dmg:35,rad:75,range:450,warn:1.0,auto:300},
-    s2:{name:'보호막',short:'보호막',cd:10,dur:5,red:0.5}},
+    s2:{name:'보호막',short:'보호막+',cd:10,dur:5,red:0.5,heal:20}},
   gunner:{name:'사격수',icon:'🔫',tag:'원거리 · 저격',hp:600,spd:160,r:15,aim:480,
     atk:{dmg:22,cd:1.0,range:450,spd:960},
-    s1:{name:'레이저',short:'레이저',cd:7,dmg:50,len:650,w:18},
+    s1:{name:'레이저',short:'레이저',cd:9,dmg:38,len:650,w:18,tele:0.4},
     s2:{name:'구르기',short:'구르기',cd:6,dist:120,dur:0.25,buff:3,mult:1.5}}
 };
 const CLS_IDS=Object.keys(CLS),GUNC='#ffc23a',SHC='#b45cff';
@@ -108,10 +108,10 @@ function rayLen(x,y,a,max){const dx=Math.cos(a),dy=Math.sin(a);let L=max;if(dx>1
   for(const q of PILLARS){const fx=q.x-x,fy=q.y-y,tp=fx*dx+fy*dy;if(tp<0)continue;const pp=fx*fx+fy*fy-tp*tp;if(pp<q.r*q.r){const t0=tp-Math.sqrt(q.r*q.r-pp);if(t0>=0&&t0<L)L=t0;}}return Math.max(0,L);}
 function collide(p){for(const q of PILLARS){const dx=p.x-q.x,dy=p.y-q.y,d=hyp(dx,dy)||.01,m=q.r+p.r;if(d<m){p.x=q.x+dx/d*m;p.y=q.y+dy/d*m;}}p.x=clamp(p.x,AR.x0+p.r,AR.x1-p.r);p.y=clamp(p.y,AR.y0+p.r,AR.y1-p.r);}
 function newPlayer(cls,i){const C=CLS[cls],s=SPAWNS[i];return{i,cls,r:C.r,x:s.x,y:s.y,face:s.f,hp:C.hp,mhp:C.hp,cd:[0,0,0],act:null,root:0,fl:0,inv:0,emp:0,sh:0,alive:true,s1n:0,s2n:0};}
-function newMatch(clsArr){const S={ph:'count',ct:1.8,rd:1,time:0,wins:clsArr.map(()=>0),winner:-1,rw:-1,P:clsArr.map((c,i)=>newPlayer(c,i)),J:[],M:[],fx:[{k:'rstart',rd:1}],nid:1,lens:[]};return S;}
+function newMatch(clsArr){const S={ph:'count',ct:1.8,rd:1,time:0,wins:clsArr.map(()=>0),winner:-1,rw:-1,P:clsArr.map((c,i)=>newPlayer(c,i)),J:[],M:[],Z:[],fx:[{k:'rstart',rd:1}],nid:1,lens:[]};return S;}
 const TLIM=300;// 라운드 제한 시간(초). 0이 되면 남은 체력% 높은 쪽 승, 같으면 무승부(재경기)
 const fmtT=t=>{const r=Math.max(0,Math.ceil(t));return Math.floor(r/60)+':'+String(r%60).padStart(2,'0');};
-function resetRound(S){S.P=S.P.map((p,i)=>{const n=newPlayer(p.cls,i);n.s1n=p.s1n;n.s2n=p.s2n;return n;});S.J=[];S.M=[];S.ph='count';S.ct=1.8;S.time=0;S.rw=-1;S.fx.push({k:'rstart',rd:S.rd});}
+function resetRound(S){S.P=S.P.map((p,i)=>{const n=newPlayer(p.cls,i);n.s1n=p.s1n;n.s2n=p.s2n;return n;});S.J=[];S.M=[];S.Z=[];S.ph='count';S.ct=1.8;S.time=0;S.rw=-1;S.fx.push({k:'rstart',rd:S.rd});}
 function nearestEnemy(S,i){const p=S.P[i];let b=null;for(const e of S.P){if(e.i===i||!e.alive)continue;const d=hyp(e.x-p.x,e.y-p.y);if(!b||d<b.d)b={e,d};}return b;}
 function step(S,inputs,dt){
   if(S.ph==='over')return;
@@ -128,7 +128,7 @@ function step(S,inputs,dt){
   S.time+=dt;
   S.tick=(S.tick||0)+1;const ord=S.tick&1?S.P.slice().reverse():S.P;for(const p of ord)updPlayer(S,p,inputs[p.i]||NOIN,dt);
   for(let a=0;a<S.P.length;a++)for(let b=a+1;b<S.P.length;b++){const p=S.P[a],q=S.P[b];if(!p.alive||!q.alive)continue;const dx=q.x-p.x,dy=q.y-p.y,d=hyp(dx,dy)||.01,m=p.r+q.r;if(d<m){const k=(m-d)/2;p.x-=dx/d*k;p.y-=dy/d*k;q.x+=dx/d*k;q.y+=dy/d*k;collide(p);collide(q);}}
-  updProj(S,dt);updMeteors(S,dt);
+  updProj(S,dt);updMeteors(S,dt);updLasers(S,dt);
   const alive=S.P.filter(p=>p.alive);
   let end=alive.length<=1,w=alive.length===1?alive[0].i:-1,to=0;
   if(!end&&S.time>=TLIM-1e-6){end=true;to=1;S.time=TLIM;const r=S.P.map(p=>p.alive?p.hp/p.mhp:0),m=Math.max(...r),top=r.map((v,i)=>Math.abs(v-m)<1e-9?i:-1).filter(i=>i>=0);w=top.length===1?top[0]:-1;}
@@ -163,12 +163,12 @@ function updPlayer(S,p,inp,dt){
     if(s1&&p.cd[1]<=0&&(p.root<=0||p.cls!=='archer')){
       p.cd[1]=C.s1.cd;
       // 거대 화살·레이저: 즉시 발사. 방향 = aim(사거리 내 가장 가까운 적 → 이동 방향 → 바라보는 방향) = 길게 누르기 미리보기 방향
-      if(p.cls==='gunner'){p.face=aim;fireLaser(S,p,aim);p.cd[0]=Math.max(p.cd[0],.2);}
+      if(p.cls==='gunner'){p.face=aim;const L=rayLen(p.x,p.y,aim,C.s1.len);S.Z.push({o:p.i,x:p.x,y:p.y,a:aim,L,t:C.s1.tele+dt});S.fx.push({k:'tele',x:Math.round(p.x),y:Math.round(p.y),a:Math.round(aim*1000)/1000,L:Math.round(L),o:p.i});p.cd[0]=Math.max(p.cd[0],.2);}
       else if(p.cls==='mage'){const t=meteorTarget(S,p,inp);p.face=Math.atan2(t.y-p.y,t.x-p.x);S.M=S.M||[];S.M.push({id:S.nid++,o:p.i,x:t.x,y:t.y,t:C.s1.warn+dt});/* +dt: 같은 스텝의 updMeteors 감소분 보정 → 정확히 warn초 후 착탄 */S.fx.push({k:'metw',x:Math.round(t.x),y:Math.round(t.y),o:p.i});}
       else{p.face=aim;spawnProj(S,p,'big',aim);p.cd[0]=Math.max(p.cd[0],.25);}
     }else if(s2&&C.s2&&p.cd[2]<=0&&(p.cls==='mage'||p.root<=0)){
       p.cd[2]=C.s2.cd;
-      if(p.cls==='mage'){p.sh=C.s2.dur;S.fx.push({k:'shield',x:Math.round(p.x),y:Math.round(p.y),o:p.i});}
+      if(p.cls==='mage'){p.sh=C.s2.dur;const hn=Math.round(Math.min(p.mhp,p.hp+C.s2.heal)-p.hp);p.hp+=hn;S.fx.push({k:'shield',x:Math.round(p.x),y:Math.round(p.y),o:p.i,n:hn});}
       else if(p.cls==='gunner'){const b=ml>.2?Math.atan2(my,mx):aim;p.kb=null;p.emp=0;p.inv=Math.max(p.inv,C.s2.dur);p.act={k:'roll',t:C.s2.dur,v:C.s2.dist/C.s2.dur,dx:Math.cos(b),dy:Math.sin(b)};S.fx.push({k:'roll',x:p.x,y:p.y,o:p.i});}
       else{// 부채꼴 연사: 3파(0.2초 간격) × n발, 피해 제한 없음
         p.face=aim;p.vol={a:aim,left:C.s2.waves,t:0};volleyWave(S,p);p.cd[0]=Math.max(p.cd[0],.2);
@@ -195,9 +195,12 @@ function spawnProj(S,p,k,ang,quiet){
   S.J.push({id:S.nid++,k,o:p.i,x:p.x+cx*(p.r+2),y:p.y+sy*(p.r+2),vx:cx*d.sp,vy:sy*d.sp,r:d.r,dmg:d.dmg,life:d.rng,sp:d.sp,pierce:d.pierce,hit:[]});
   if(!quiet)S.fx.push({k:'shot',s:k,x:p.x,y:p.y,o:p.i});
 }
-function fireLaser(S,p,a){const C=CLS[p.cls].s1,L=rayLen(p.x,p.y,a,C.len),dx=Math.cos(a),dy=Math.sin(a);
-  S.fx.push({k:'laser',x:Math.round(p.x),y:Math.round(p.y),a:Math.round(a*1000)/1000,L:Math.round(L),o:p.i});
-  for(const e of S.P){if(e.i===p.i||!e.alive)continue;const rx=e.x-p.x,ry=e.y-p.y,t=rx*dx+ry*dy;if(t<-e.r||t>L+e.r)continue;if(Math.abs(rx*dy-ry*dx)<e.r+C.w/2)damage(S,e,C.dmg,p.i);}}
+// 레이저: 시전 순간 위치·방향 고정 → tele초 예고선 → 같은 선으로 발사(시전자가 그 사이 죽으면 취소)
+function onLine(z,x,y,hw){const dx=Math.cos(z.a),dy=Math.sin(z.a),rx=x-z.x,ry=y-z.y,t=rx*dx+ry*dy;return t>-hw&&t<z.L+hw&&Math.abs(rx*dy-ry*dx)<hw;}
+function updLasers(S,dt){for(let n=S.Z.length-1;n>=0;n--){const z=S.Z[n];z.t-=dt;if(z.t>1e-6)continue;S.Z.splice(n,1);const p=S.P[z.o];if(p&&p.alive)fireLaser(S,p,z);}}
+function fireLaser(S,p,z){const C=CLS[p.cls].s1,a=z.a,L=z.L,dx=Math.cos(a),dy=Math.sin(a);
+  S.fx.push({k:'laser',x:Math.round(z.x),y:Math.round(z.y),a:Math.round(a*1000)/1000,L:Math.round(L),o:p.i});
+  for(const e of S.P){if(e.i===p.i||!e.alive)continue;const rx=e.x-z.x,ry=e.y-z.y,t=rx*dx+ry*dy;if(t<-e.r||t>L+e.r)continue;if(Math.abs(rx*dy-ry*dx)<e.r+C.w/2)damage(S,e,C.dmg,p.i);}}
 // 메테오: 목표 지점 계산(수동 조준 → 최대 사거리로 제한, 탭 → 상대 위치 자동 조준, 상대 없으면 바라보는 방향)
 function meteorTarget(S,p,inp){const C=CLS.mage.s1;let tx,ty;
   if(inp.s1m&&isFinite(+inp.s1x)&&isFinite(+inp.s1y)){tx=+inp.s1x;ty=+inp.s1y;}
@@ -237,6 +240,8 @@ function botThink(S,i,B,dt){
   const e=ne.e,d=Math.max(1,ne.d),ux=(e.x-p.x)/d,uy=(e.y-p.y)/d,C=CLS[p.cls];
   const los=!segBlocked(p.x,p.y,e.x,e.y,3),ek=e.act&&e.act.k;
   let evx=0,evy=0;if(B.lx!=null&&dt>0){evx=(e.x-B.lx)/dt;evy=(e.y-B.ly)/dt;if(hyp(evx,evy)>400){evx=evy=0;}}B.ev=B.ev||{x:0,y:0};B.ev.x+=(evx-B.ev.x)*.3;B.ev.y+=(evy-B.ev.y)*.3;B.lx=e.x;B.ly=e.y;
+  // 레이저 예고선 인지(반응 지연 0.12초 후)
+  const lzs=(S.Z||[]).filter(z=>z.o!==i&&CLS.gunner.s1.tele-z.t>=.12);
   const MR=CLS.mage.s1.rad,MW=CLS.mage.s1.warn;B.mrt=B.mrt||{};const mets=(S.M||[]).filter(m=>{if(m.o===i)return false;let rt=B.mrt[m.id];if(rt==null)rt=B.mrt[m.id]=.15+Math.random()*.1;return MW-m.t>=rt;});if(!(S.M&&S.M.length))B.mrt={};let inMet=null;for(const m of mets){if(hyp(p.x-m.x,p.y-m.y)<MR+p.r+6&&(!inMet||m.t<inMet.t))inMet=m;}
   B.st-=dt;if(B.st<=0){B.sx=-B.sx;B.st=.5+Math.random()*1.1;}
   B.dec-=dt;const dec=B.dec<=0;if(dec){B.dec=.1+Math.random()*.12;B.dodge=Math.random()<.35;}
@@ -252,6 +257,7 @@ function botThink(S,i,B,dt){
       for(const q of PILLARS){const g=hyp(fx-q.x,fy-q.y)-q.r-p.r;if(g<20)sc-=(20-g)*3;}
       if(segBlocked(fx,fy,e.x,e.y,3))sc-=40;
       for(const m of mets){const g=MR+p.r+12-hyp(fx-m.x,fy-m.y);if(g>0)sc-=300+g*6;}
+      for(const z of lzs){if(onLine(z,fx,fy,p.r+CLS.gunner.s1.w/2+12))sc-=320;}
       if(sc>best){best=sc;mx=dx;my=dy;}}
     if(inMet){const ax=p.x-inMet.x,ay=p.y-inMet.y,al=hyp(ax,ay);if(al>1){mx+=ax/al*2;my+=ay/al*2;}else{mx+=-uy*2*B.sx;my+=ux*2*B.sx;}}
     if(th){const l=hyp(th.j.vx,th.j.vy),side=((p.x-th.j.x)*-th.j.vy+(p.y-th.j.y)*th.j.vx)>0?1:-1;mx+=-th.j.vy/l*side*1.5;my+=th.j.vx/l*side*1.5;}
@@ -259,13 +265,13 @@ function botThink(S,i,B,dt){
     let metEsc=false;if(inMet&&!(B.mdone=B.mdone||{})[inMet.id]){B.mdone[inMet.id]=1;metEsc=Math.random()<.6;}if(!(S.M&&S.M.length))B.mdone={};
     // 마법사 보호막(5초): 저체력이거나 상대가 거대 화살·레이저·연사를 쓸 때
     // 즉시 발사 스킬이라 예고 없음 → 상대 거대 화살/레이저가 준비된 상태로 시야·사거리 안이면 확률적으로 미리 사용
-    const bigIn=th&&th.j.k==='big',rdy=dec&&los&&e.alive&&e.cd[1]<=0&&((e.cls==='archer'&&d<CLS.archer.s1.range-40)||(e.cls==='gunner'&&d<CLS.gunner.s1.len-40))&&Math.random()<.25,volIn=!!e.vol&&d<C.atk.range;
-    if(MG&&p.cd[2]<=0&&(bigIn||rdy||volIn||(dec&&p.hp<p.mhp*.35&&d<320&&Math.random()<.35)))o.s2n++;
+    const onLz=lzs.some(z=>onLine(z,p.x,p.y,p.r+CLS.gunner.s1.w/2+2)),bigIn=th&&th.j.k==='big',rdy=dec&&los&&e.alive&&e.cd[1]<=0&&((e.cls==='archer'&&d<CLS.archer.s1.range-40)||(e.cls==='gunner'&&d<CLS.gunner.s1.len-40))&&Math.random()<.25,volIn=!!e.vol&&d<C.atk.range;
+    if(MG&&p.cd[2]<=0&&(bigIn||onLz||rdy||volIn||(dec&&p.hp<p.mhp*.35&&d<320&&Math.random()<.35)))o.s2n++;
     else if(metEsc&&GN&&p.cd[2]<=0)o.s2n++;
     else if(dec&&MG){
       if(p.cd[1]<=0&&d<C.s1.range+40&&Math.random()<.5){const L=Math.min(C.s1.warn,.6);o.s1m=1;o.s1x=e.x+B.ev.x*L;o.s1y=e.y+B.ev.y*L;o.s1n++;}
     }else if(dec&&GN){
-      if(p.cd[2]<=0&&((th&&Math.random()<.6)||(p.hp<p.mhp*.35&&d<180&&Math.random()<.3)))o.s2n++;
+      if(p.cd[2]<=0&&((th&&Math.random()<.6)||(onLz&&Math.random()<.8)||(p.hp<p.mhp*.35&&d<180&&Math.random()<.3)))o.s2n++;
       else if(p.cd[1]<=0&&!inMet&&los&&!segBlocked(p.x,p.y,e.x,e.y,8)&&d<C.s1.len-80&&ek!=='roll'&&Math.random()<.4)o.s1n++;
     }else if(dec){
       // 부채꼴 연사: 사거리 안·시야 확보 시, 가까울수록 자주 사용
@@ -334,7 +340,7 @@ function tone(f,d,type,v,f2,dl){if(!AC)return;const t=AC.currentTime+(dl||0),o=A
 function noise(d,v,fq,dl){if(!AC)return;if(!NB){NB=AC.createBuffer(1,AC.sampleRate*.5|0,AC.sampleRate);const c=NB.getChannelData(0);for(let i=0;i<c.length;i++)c[i]=Math.random()*2-1;}const t=AC.currentTime+(dl||0),s=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();s.buffer=NB;f.type='bandpass';f.frequency.value=fq;f.Q.value=1.2;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);s.connect(f).connect(g).connect(AC.destination);s.start(t);s.stop(t+d+.02);}
 const SFX={
   bullet:()=>{tone(1300,.06,'square',.035,320);noise(.05,.18,3200);},bullet2:()=>{tone(900,.1,'sawtooth',.05,200);noise(.08,.28,2600);},
-  laser:()=>{noise(.3,.32,2200);tone(1800,.3,'sawtooth',.06,180);},shield:()=>{tone(520,.25,'triangle',.05,1040);tone(780,.2,'sine',.03,1300,.05);},roll:()=>noise(.15,.15,1400),
+  laser:()=>{noise(.3,.32,2200);tone(1800,.3,'sawtooth',.06,180);},shield:()=>{tone(520,.25,'triangle',.05,1040);tone(780,.2,'sine',.03,1300,.05);},tele:()=>tone(900,.12,'sine',.03,1300),roll:()=>noise(.15,.15,1400),
   arrow:()=>tone(900,.07,'square',.03,500),big:()=>{tone(160,.35,'sawtooth',.08,60);noise(.25,.3,600);},
   hit:()=>{tone(140,.12,'square',.07,60);noise(.08,.25,900);},hurt:()=>{tone(90,.2,'sawtooth',.09,45);},
   spark:()=>noise(.05,.08,4000),
@@ -358,8 +364,9 @@ function playFx(e){
     case 'boom':FXL.push({k:'ring',x:e.x,y:e.y,col:colOf(e.o),t:.25,T:.25,r0:6,r1:CLS.mage.atk.rad+4});burst(e.x,e.y,colOf(e.o),8,180);sfx('boom');break;
     case 'metw':sfx('metw');break;
     case 'meteor':{const R=CLS.mage.s1.rad,c=colOf(e.o);FXL.push({k:'ring',x:e.x,y:e.y,col:c,t:.45,T:.45,r0:R,r1:R,lw:6,fa:.3});FXL.push({k:'ring',x:e.x,y:e.y,col:'#ffb040',t:.4,T:.4,r0:12,r1:R+8});FXL.push({k:'ring',x:e.x,y:e.y,col:'#ffffff',t:.25,T:.25,r0:6,r1:R*.65});FXL.push({k:'flash',x:e.x,y:e.y,col:'#ff9a2a',t:.35,T:.35,r:R*1.3});burst(e.x,e.y,'#ffb040',16,320);burst(e.x,e.y,c,10,220);shake=Math.max(shake,7);sfx('meteor');}break;
+    case 'tele':FXL.push({k:'tele',x:e.x,y:e.y,a:e.a,L:e.L,o:e.o,col:colOf(e.o),t:CLS.gunner.s1.tele,T:CLS.gunner.s1.tele});sfx('tele');break;
     case 'laser':FXL.push({k:'beam',x:e.x,y:e.y,a:e.a,L:e.L,o:e.o,col:colOf(e.o),t:.18,T:.18});FXL.push({k:'flash',x:e.x,y:e.y,col:'#ffffff',t:.12,T:.12,r:30});burst(e.x+Math.cos(e.a)*e.L,e.y+Math.sin(e.a)*e.L,colOf(e.o),8,200);shake=Math.max(shake,4);sfx('laser');break;
-    case 'shield':FXL.push({k:'ring',x:e.x,y:e.y,col:SHC,t:.3,T:.3,r0:8,r1:40});sfx('shield');break;
+    case 'shield':FXL.push({k:'ring',x:e.x,y:e.y,col:SHC,t:.3,T:.3,r0:8,r1:40});if(e.n>0)TEXTS.push({x:e.x,y:e.y-26,s:'+'+e.n,col:'#4dff9a',t:.9});sfx('shield');break;
     case 'roll':FXL.push({k:'ring',x:e.x,y:e.y,col:colOf(e.o),t:.25,T:.25,r0:6,r1:28});sfx('roll');break;
     case 'volley':FXL.push({k:'ring',x:e.x,y:e.y,col:colOf(e.o),t:.25,T:.25,r0:8,r1:30});sfx('volley');break;
     case 'ko':burst(e.x,e.y,bodyCol(e.v),40,300);shake=10;sfx('ko');break;
@@ -407,7 +414,7 @@ function render(V,now){
   if(aimD.id!==null){const me=V.P[myIdx];if(me&&me.alive&&me.cls==='mage'){let t=aimPoint(me);const R=CLS.mage.s1.rad,ok=me.cd[1]<=0;if(!t.drag){if(!heldK('s1'))t=null;else{t=autoMet(V,me);t.drag=true;}}if(t){ctx.strokeStyle=ME;ctx.globalAlpha=.18;ctx.lineWidth=1.5;ctx.setLineDash([6,8]);ctx.beginPath();ctx.arc(me.x,me.y,CLS.mage.s1.range,0,TAU);ctx.stroke();ctx.globalAlpha=.45;ctx.beginPath();ctx.moveTo(me.x,me.y);ctx.lineTo(t.x,t.y);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=ok?ME:'#888899';ctx.globalAlpha=t.drag?.16:.08;ctx.beginPath();ctx.arc(t.x,t.y,R,0,TAU);ctx.fill();ctx.globalAlpha=t.drag?.9:.4;ctx.strokeStyle=ok?ME:'#888899';ctx.lineWidth=2.5;ctx.stroke();halo(ok?ME:'#888899',t.x,t.y,22,.6);ctx.globalAlpha=1;}}}
   drawPreview(V);ctx.restore();
   // 이펙트
-  for(const f of FXL){if(f.k==='flash'){halo(f.col,f.x,f.y,f.r,f.t/f.T*.9);continue;}const k=f.t/f.T;if(f.k==='beam'){const w=CLS.gunner.s1.w,op=V.P[f.o];if(op&&op.alive&&(op.x!==f.x||op.y!==f.y)){f.x=op.x;f.y=op.y;f.L=rayLen(f.x,f.y,f.a,CLS.gunner.s1.len);}ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.a);ctx.fillStyle=f.col;ctx.globalAlpha=.35*k;ctx.fillRect(0,-w*(1.4-.4*k),f.L,w*(2.8-.8*k));ctx.globalAlpha=.9*k;ctx.fillRect(0,-w/2*k,f.L,w*k);ctx.globalAlpha=k;ctx.fillStyle='#fff';ctx.fillRect(0,-2*k,f.L,4*k);ctx.restore();ctx.globalAlpha=1;halo(f.col,f.x,f.y,26,k);}
+  for(const f of FXL){if(f.k==='tele'){const w=CLS.gunner.s1.w,bl=.5+.5*Math.sin(now*.045);ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.a);ctx.fillStyle=f.col;ctx.globalAlpha=.07+.09*bl;ctx.fillRect(0,-w/2,f.L,w);ctx.globalAlpha=.25+.3*bl;ctx.strokeStyle=f.col;ctx.lineWidth=1;ctx.setLineDash([8,6]);ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(f.L,0);ctx.stroke();ctx.setLineDash([]);ctx.restore();ctx.globalAlpha=1;continue;}if(f.k==='flash'){halo(f.col,f.x,f.y,f.r,f.t/f.T*.9);continue;}const k=f.t/f.T;if(f.k==='beam'){const w=CLS.gunner.s1.w;ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.a);ctx.fillStyle=f.col;ctx.globalAlpha=.35*k;ctx.fillRect(0,-w*(1.4-.4*k),f.L,w*(2.8-.8*k));ctx.globalAlpha=.9*k;ctx.fillRect(0,-w/2*k,f.L,w*k);ctx.globalAlpha=k;ctx.fillStyle='#fff';ctx.fillRect(0,-2*k,f.L,4*k);ctx.restore();ctx.globalAlpha=1;halo(f.col,f.x,f.y,26,k);}
     else if(f.k==='ring'){glow(f.col,12);ctx.globalAlpha=k;ctx.strokeStyle=f.col;ctx.lineWidth=f.lw||3;ctx.beginPath();ctx.arc(f.x,f.y,f.r1+(f.r0-f.r1)*k,0,TAU);if(f.fa){ctx.globalAlpha=k*f.fa;ctx.fillStyle=f.col;ctx.fill();ctx.globalAlpha=k;}ctx.stroke();ctx.globalAlpha=1;}}
   // 투사체
   for(const j of V.J){const c=colOf(j.o),a=Math.atan2(j.vy,j.vx);ctx.save();ctx.translate(j.x,j.y);ctx.rotate(a);halo(j.k==='bullet2'?GUNC:j.o===myIdx?ME:'#ff2a4a',j.k==='arrow'?2:0,0,j.k==='arrow'||j.k==='bullet'?12:j.k==='bullet2'?18:j.k==='big'?30:28,.8);ctx.strokeStyle=c;ctx.fillStyle=c;
@@ -514,8 +521,8 @@ function statRows(c){const C=CLS[c],dps=C.atk.dmg/C.atk.cd;
 function buildCards(){
   const A=CLS.archer,M=CLS.mage,G=CLS.gunner;
   const sk={archer:`기본: 화살 (관통 X)<br>스킬1 ${A.s1.name}: 즉시 발사 관통 ${A.s1.dmg} 피해(자동 조준, 길게 눌러 방향 확인) · ${A.s1.cd}초<br>스킬2 ${A.s2.name}: ${A.s2.fan}° 부채꼴로 화살 ${A.s2.n}발 × ${A.s2.waves}회(${A.s2.gap}초 간격, 각 ${A.s2.dmg}) · ${A.s2.cd}초`};
-  sk.mage=`기본: 화염구 (착탄 시 반경 ${M.atk.rad} 폭발)<br>스킬1 ${M.s1.name}: 드래그 조준(최대 ${M.s1.range}, 탭=자동) → ${M.s1.warn}초 후 반경 ${M.s1.rad} 낙하 ${M.s1.dmg} 피해(기둥 무시) · ${M.s1.cd}초<br>스킬2 ${M.s2.name}: 즉시 ${M.s2.dur}초간 받는 피해 ${Math.round(M.s2.red*100)}% 감소(이동·공격 가능) · ${M.s2.cd}초`;
-  sk.gunner=`기본: 사격 (고속탄, ${G.atk.dmg} 피해)<br>스킬1 ${G.s1.name}: 즉시 관통 광선 ${G.s1.dmg} 피해(자동 조준, 길게 눌러 방향 확인) · ${G.s1.cd}초<br>스킬2 ${G.s2.name}: ${G.s2.dist} 이동·무적 → ${G.s2.buff}초 내 다음 사격 ${G.s2.mult}배(${Math.round(G.atk.dmg*G.s2.mult)}) · ${G.s2.cd}초`;
+  sk.mage=`기본: 화염구 (착탄 시 반경 ${M.atk.rad} 폭발)<br>스킬1 ${M.s1.name}: 드래그 조준(최대 ${M.s1.range}, 탭=자동) → ${M.s1.warn}초 후 반경 ${M.s1.rad} 낙하 ${M.s1.dmg} 피해(기둥 무시) · ${M.s1.cd}초<br>스킬2 ${M.s2.name}: 즉시 체력 ${M.s2.heal} 회복 + ${M.s2.dur}초간 받는 피해 ${Math.round(M.s2.red*100)}% 감소(이동·공격 가능) · ${M.s2.cd}초`;
+  sk.gunner=`기본: 사격 (고속탄, ${G.atk.dmg} 피해)<br>스킬1 ${G.s1.name}: ${G.s1.tele}초 예고 후 관통 광선 ${G.s1.dmg} 피해(자동 조준·시전 위치/방향 고정, 길게 눌러 방향 확인) · ${G.s1.cd}초<br>스킬2 ${G.s2.name}: ${G.s2.dist} 이동·무적 → ${G.s2.buff}초 내 다음 사격 ${G.s2.mult}배(${Math.round(G.atk.dmg*G.s2.mult)}) · ${G.s2.cd}초`;
   $('cards').innerHTML=CLS_IDS.map(c=>`<div class="card" data-c="${c}"><h3>${CLS[c].icon} ${CLS[c].name}<small>${CLS[c].tag}</small></h3>${statRows(c)}<div class="sk">${sk[c]}</div></div>`).join('');
   for(const el of document.querySelectorAll('.card'))el.onclick=()=>{sel.my=el.dataset.c;if(sel.mode==='online')sendPick();renderSel();};
 }
