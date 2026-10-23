@@ -35,6 +35,12 @@ input{font:inherit;font-size:24px;font-weight:800;letter-spacing:8px;text-align:
 .bar{flex:1;height:7px;background:#14203a;border-radius:4px;overflow:hidden}
 .bar i{display:block;height:100%;background:linear-gradient(90deg,#0ff,#f0f);box-shadow:0 0 6px #0ff}
 .sk{font-size:11px;color:#bcd;margin-top:5px;line-height:1.4}
+#lobby{gap:6px}#lobby h1{font-size:40px}
+#iName{font-size:15px;letter-spacing:1px;width:120px;padding:6px;text-transform:none;border-color:#0ff;box-shadow:0 0 8px #0ff8}
+.ptl{font-size:13px;color:#0ff;font-weight:700}
+#pubList{width:560px;max-height:96px;overflow-y:auto;border:1px solid #2a3550;border-radius:10px;background:#000a;padding:4px 8px;font-size:13px;color:#9ab;text-align:center}
+.prow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;color:#cfe;text-align:left}
+.prow button{font-size:13px;padding:3px 10px}
 #rot{position:fixed;left:0;right:0;top:8px;text-align:center;font-size:14px;color:#ffd36b;pointer-events:none;display:none;z-index:9}
 </style>
 </head>
@@ -44,7 +50,9 @@ input{font:inherit;font-size:24px;font-weight:800;letter-spacing:8px;text-align:
 <div id="lobby" class="scr on">
   <h1>NEON PVP</h1>
   <div class="sm2">폰으로 1:1 실시간 대결 · 3판 2선승</div>
-  <div class="row"><button id="bCreate">방 만들기</button><input id="iCode" maxlength="4" placeholder="코드" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="bJoin" class="pk">참가</button></div>
+  <div class="row"><span class="ptl">공개방</span><input id="iName" maxlength="10" placeholder="닉네임" autocomplete="off" spellcheck="false"><button id="bPubCreate" class="sm">공개방 만들기</button><button id="bPubRef" class="sm pk">새로고침 ↻</button></div>
+  <div id="pubList">공개방 찾는 중…</div>
+  <div class="row"><span class="ptl">비공개</span><button id="bCreate">방 만들기</button><input id="iCode" maxlength="4" placeholder="코드" autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="bJoin" class="pk">참가</button></div>
   <button id="bBot">연습 (봇 대전)</button>
   <div id="mLobby" class="msg"></div>
   <div class="sm2">PC: WASD 이동 · J 기본공격 · K 스킬1 · L 스킬2</div>
@@ -625,9 +633,9 @@ function errMsg(err){const t=err&&err.type;
   if(t==='webrtc')return'직접 연결(WebRTC)에 실패했어요. 다른 네트워크로 시도해보세요.';
   return'연결 오류: '+(t||'알 수 없음');}
 function cleanupNet(delay){clearInterval(hb);hb=null;if(net.to)clearTimeout(net.to);const c=conn,p=peer;conn=null;peer=null;net={role:null};rtt=0;const kill=()=>{try{c&&c.close();}catch(e){}try{p&&p.destroy();}catch(e){}};if(delay)setTimeout(kill,delay);else kill();}
-function netFail(msg){cleanupNet();mode=null;S=null;show('lobby');setMsg('mLobby',msg);lobbyBusy(false);}
-function leaveToLobby(){send({t:'bye'});cleanupNet(300);mode=null;S=null;show('lobby');setMsg('mLobby','');lobbyBusy(false);}
-function lobbyBusy(b){$('bCreate').disabled=b;$('bJoin').disabled=b;$('bBot').disabled=b;}
+function netFail(msg){cleanupNet();mode=null;S=null;show('lobby');setMsg('mLobby',msg);lobbyBusy(false);refreshPub();}
+function leaveToLobby(){send({t:'bye'});cleanupNet(300);mode=null;S=null;show('lobby');setMsg('mLobby','');lobbyBusy(false);refreshPub();}
+function lobbyBusy(b){$('bPubCreate').disabled=b;$('bPubRef').disabled=b;$('bCreate').disabled=b;$('bJoin').disabled=b;$('bBot').disabled=b;}
 function startHB(){clearInterval(hb);lastRecv=performance.now();hb=setInterval(()=>{if(!conn)return;send({t:'ping',ts:performance.now()});if(performance.now()-lastRecv>7000)netFail('상대의 응답이 없어 연결을 종료했어요.');},1000);}
 function setupConn(c){
   c.on('open',()=>{if(conn!==c)return;lastRecv=performance.now();if(net.role==='guest')c.send({t:'hello',v:1});startHB();});
@@ -635,28 +643,28 @@ function setupConn(c){
   c.on('close',()=>{if(conn===c)netFail('상대와의 연결이 끊겼어요.');});
   c.on('error',()=>{if(conn===c)netFail('연결 오류가 발생했어요.');});
 }
-function createRoom(tries){
-  tries=tries||0;cleanupNet();setMsg('mLobby','');
+function createRoom(tries,pub){
+  tries=tries||0;cleanupNet();stopProbe();setMsg('mLobby','');
   if(typeof Peer==='undefined'){setMsg('mLobby','PeerJS를 불러오지 못했어요. 인터넷 연결을 확인하세요.');return;}
-  const code=genCode(),my={role:'host',code};net=my;
+  const code=pub?'공개 #'+pub:genCode(),my={role:'host',code,pub:pub||0};net=my;
   show('room');$('tCode').textContent=code;setMsg('mRoom','방 만드는 중…');$('tLink').textContent='';
-  peer=new Peer(PREFIX+code,{debug:0,config:ICE});
+  peer=new Peer(pub?PUB_PREFIX+pub:PREFIX+code,{debug:0,config:ICE});
   my.to=setTimeout(()=>{if(net===my&&!my.open)netFail('방 서버(브로커) 연결 시간 초과. 네트워크를 확인하세요.');},12000);
-  peer.on('open',()=>{if(net!==my)return;my.open=true;clearTimeout(my.to);setMsg('mRoom','상대를 기다리는 중… 코드를 알려주거나 링크를 보내세요');$('tLink').textContent=inviteLink(code);});
-  peer.on('connection',c=>{if(net!==my)return;if(conn){c.on('open',()=>{c.send({t:'full'});setTimeout(()=>c.close(),500);});return;}conn=c;setMsg('mRoom','상대가 들어오는 중…');setupConn(c);});
-  peer.on('error',err=>{if(net!==my)return;if(err.type==='unavailable-id'){if(tries<4){createRoom(tries+1);return;}netFail('방 코드가 이미 사용 중이에요. 다시 시도하세요.');return;}
+  peer.on('open',()=>{if(net!==my)return;my.open=true;clearTimeout(my.to);if(pub){setMsg('mRoom','공개방 #'+pub+' 열림 — 로비 목록에서 상대가 참가할 수 있어요');$('tLink').textContent='';}else{setMsg('mRoom','상대를 기다리는 중… 코드를 알려주거나 링크를 보내세요');$('tLink').textContent=inviteLink(code);}});
+  peer.on('connection',c=>{if(net!==my)return;if(c.metadata&&c.metadata.probe){c.on('open',()=>{try{c.send({t:'info',name:myName(),n:conn?2:1,max:2,st:(conn&&screenId!=='room'&&screenId!=='select')||mode==='host'?'game':'wait'});}catch(e){}setTimeout(()=>{try{c.close();}catch(e){}},300);});return;}if(conn){c.on('open',()=>{c.send({t:'full'});setTimeout(()=>c.close(),500);});return;}conn=c;setMsg('mRoom','상대가 들어오는 중…');setupConn(c);});
+  peer.on('error',err=>{if(net!==my)return;if(err.type==='unavailable-id'){if(pub){if(pub<PUB_N){createRoom(0,pub+1);return;}netFail('공개방 자리(1~'+PUB_N+')가 모두 사용 중이에요. 비공개 방을 이용하세요.');return;}if(tries<4){createRoom(tries+1);return;}netFail('방 코드가 이미 사용 중이에요. 다시 시도하세요.');return;}
     if(err.type==='peer-unavailable')return;if(!conn||!conn.open)netFail(errMsg(err));});
   peer.on('disconnected',()=>{if(net===my&&peer&&!peer.destroyed&&!conn)try{peer.reconnect();}catch(e){}});
 }
 function inviteLink(code){return location.origin+location.pathname+'?room='+code;}
-function joinRoom(code){
-  code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(code.length!==4||[...code].some(ch=>!ALPH.includes(ch))){setMsg('mLobby','방 코드 4자리를 확인하세요.');return;}
+function joinRoom(code,pubId){
+  if(!pubId)code=(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!pubId&&(code.length!==4||[...code].some(ch=>!ALPH.includes(ch)))){setMsg('mLobby','방 코드 4자리를 확인하세요.');return;}
   if(typeof Peer==='undefined'){setMsg('mLobby','PeerJS를 불러오지 못했어요. 인터넷 연결을 확인하세요.');return;}
-  cleanupNet();const my={role:'guest',code};net=my;lobbyBusy(true);setMsg('mLobby','연결 중… ('+code+')');
+  cleanupNet();stopProbe();const my={role:'guest',code};net=my;lobbyBusy(true);setMsg('mLobby','연결 중… ('+code+')');
   peer=new Peer({debug:0,config:ICE});
   my.to=setTimeout(()=>{if(net===my&&!my.ok)netFail(my.open?'연결 시간 초과: 방장과 직접 연결하지 못했어요. (방이 닫혔거나 네트워크/NAT 제한) 다른 Wi-Fi·LTE로 다시 시도해보세요.':'방 서버(브로커) 연결 시간 초과. 인터넷 연결을 확인하세요.');},15000);
-  peer.on('open',()=>{if(net!==my)return;my.open=true;conn=peer.connect(PREFIX+code,{serialization:'json',reliable:true});setupConn(conn);});
+  peer.on('open',()=>{if(net!==my)return;my.open=true;conn=peer.connect(pubId||PREFIX+code,{serialization:'json',reliable:true});setupConn(conn);});
   peer.on('error',err=>{if(net!==my)return;if(!my.ok||err.type==='peer-unavailable')netFail(errMsg(err));});
 }
 function onData(d){
@@ -678,6 +686,38 @@ function onData(d){
 }
 function sendPick(){send({t:'pick',c:sel.my,r:sel.ready});}
 function hostMaybeStart(){if(net.role==='host'&&screenId==='select'&&sel.ready&&sel.oppReady&&sel.opp){const cls=[sel.my,sel.opp];send({t:'start',cls});startHost(cls);}}
+
+// ===== 공개방 (PeerJS ID 슬롯 neonpvp-gkc-pub-1..10, 서버리스) =====
+const PUB_PREFIX='neonpvp-gkc-pub-',PUB_N=10;let probe=null;
+function myName(){const v=($('iName').value||'').trim().slice(0,10);return v||'플레이어';}
+function stopProbe(){if(probe){try{probe.peer.destroy();}catch(e){}probe=null;}}
+function refreshPub(){stopProbe();const L=$('pubList');L.textContent='공개방 찾는 중…';
+  if(typeof Peer==='undefined'){L.textContent='PeerJS를 불러오지 못했어요. 인터넷 연결을 확인하세요.';return;}
+  let pp;try{pp=new Peer({debug:0,config:ICE});}catch(e){L.textContent='연결 오류';return;}
+  const pr={peer:pp,res:{},left:PUB_N};probe=pr;
+  const fin=()=>{if(probe!==pr)return;probe=null;try{pp.destroy();}catch(e){}renderPub(pr.res,false);};
+  const T=setTimeout(fin,4500);
+  pp.on('open',()=>{if(probe!==pr)return;for(let s=1;s<=PUB_N;s++){let c,done=false;
+    const end=()=>{if(done)return;done=true;try{c&&c.close();}catch(e){}if(--pr.left<=0){clearTimeout(T);fin();}};
+    try{c=pp.connect(PUB_PREFIX+s,{serialization:'json',reliable:true,metadata:{probe:1}});}catch(e){end();continue;}
+    c.on('data',d=>{if(d&&d.t==='info'&&probe===pr){pr.res[s]=d;renderPub(pr.res,true);}end();});c.on('error',end);c.on('close',end);setTimeout(end,3000);}});
+  pp.on('error',e=>{if(e&&e.type==='peer-unavailable')return;clearTimeout(T);fin();});
+}
+function renderPub(res,partial){const L=$('pubList');L.innerHTML='';const ks=Object.keys(res).map(Number).sort((a,b)=>a-b);
+  for(const s of ks){const d=res[s],mx=2,n=Math.max(0,Math.min(mx,d.n|0)),game=d.st==='game',ok=!game&&n<mx;
+    const row=document.createElement('div');row.className='prow';const t=document.createElement('span');
+    t.textContent=`#${s} ${String(d.name||'플레이어').slice(0,10)}의 방 · ${n}/${mx} · ${game?'게임중':'대기중'}`;row.appendChild(t);
+    const b=document.createElement('button');b.className='sm';b.textContent=ok?'참가':(game?'게임중':'가득 참');
+    b.onclick=()=>{if(!ok){setMsg('mLobby',game?'이미 게임 중인 방이라 참가할 수 없어요.':'방이 가득 찼어요.');return;}joinRoom('공개 #'+s,PUB_PREFIX+s);};
+    if(!ok){b.style.opacity='.4';b.title='참가 불가';b.setAttribute('aria-disabled','true');}
+    row.appendChild(b);L.appendChild(row);}
+  if(!ks.length)L.textContent=partial?'공개방 찾는 중…':'열린 공개방이 없어요. 새로고침하거나 직접 만들어 보세요!';}
+addEventListener('beforeunload',()=>{try{stopProbe();}catch(e){}});
+$('bPubCreate').onclick=()=>{try{localStorage.setItem('neonpvp_name',$('iName').value);}catch(e){}createRoom(0,1);};
+$('bPubRef').onclick=()=>refreshPub();
+try{$('iName').value=localStorage.getItem('neonpvp_name')||'';}catch(e){}
+$('iName').addEventListener('change',()=>{try{localStorage.setItem('neonpvp_name',$('iName').value);}catch(e){}});
+setTimeout(refreshPub,300);
 
 // ===== 로비 =====
 $('bCreate').onclick=()=>createRoom(0);
